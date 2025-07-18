@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -318,8 +279,8 @@
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
-            opacity: 1; /* Ensure buttons are always visible */
-            pointer-events: auto; /* Ensure buttons are always clickable */
+            opacity: 1;
+            pointer-events: auto;
         }
 
         .scroll-btn {
@@ -336,7 +297,7 @@
             cursor: pointer;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
-            pointer-events: auto; /* Ensure buttons are clickable */
+            pointer-events: auto;
         }
 
         .scroll-btn:hover {
@@ -475,7 +436,7 @@
                         <input type="date" id="orderDate" name="orderDate" required>
                     </div>
                     <div class="form-group">
-                        <label for="OR">Order Number:</label>
+                        <label for="orderNumber">Order Number:</label>
                         <input type="text" id="orderNumber" name="orderNumber">
                     </div>
                 </div>
@@ -705,11 +666,17 @@
             const doc = new jsPDF();
             
             // Get form data
-            const customerName = document.getElementById('customerName').value || 'N/A';
-            const repName = document.getElementById('repName').value || 'N/A';
-            const orderDate = document.getElementById('orderDate').value || 'N/A';
-            const orderNumber = document.getElementById('orderNumber').value || 'N/A';
+            const customerName = document.getElementById('customerName').value || 'Unknown_Customer';
+            const repName = document.getElementById('repName').value || 'Unknown_Rep';
+            const orderDate = document.getElementById('orderDate').value || new Date().toISOString().split('T')[0];
+            const orderNumber = document.getElementById('orderNumber').value || 'Draft';
             const priceType = currentPriceType === 'cash' ? 'For Cash' : 'For Credit';
+            
+            // Sanitize names for filename (remove special characters)
+            const sanitize = (str) => str.replace(/[^a-zA-Z0-9-_]/g, '_');
+            const sanitizedCustomerName = sanitize(customerName);
+            const sanitizedRepName = sanitize(repName);
+            const filename = `Jayananda_Order_${sanitizedCustomerName}_${sanitizedRepName}_${orderDate}.pdf`;
             
             // Header
             doc.setFontSize(20);
@@ -770,8 +737,24 @@
             doc.setFontSize(12);
             doc.text(`Grand Total: Rs.${grandTotal.toFixed(2)}`, 170, yPos, { align: 'right' });
             
-            // Save PDF
-            doc.save(`Jayananda_Order_${orderNumber || 'Draft'}_${new Date().toISOString().split('T')[0]}.pdf`);
+            // Generate PDF blob for sharing
+            const pdfBlob = doc.output('blob');
+            
+            // Share or download
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
+                navigator.share({
+                    files: [new File([pdfBlob], filename, { type: 'application/pdf' })],
+                    title: 'Jayananda Associates Order',
+                    text: `Order for ${customerName} by ${repName} on ${orderDate}`
+                }).catch((error) => {
+                    console.error('Error sharing PDF:', error);
+                    // Fallback to download
+                    doc.save(filename);
+                });
+            } else {
+                // Fallback to download if sharing is not supported
+                doc.save(filename);
+            }
         }
 
         async function saveOrder() {
