@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -279,8 +318,8 @@
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
-            opacity: 1;
-            pointer-events: auto;
+            opacity: 1; /* Ensure buttons are always visible */
+            pointer-events: auto; /* Ensure buttons are always clickable */
         }
 
         .scroll-btn {
@@ -297,7 +336,7 @@
             cursor: pointer;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
-            pointer-events: auto;
+            pointer-events: auto; /* Ensure buttons are clickable */
         }
 
         .scroll-btn:hover {
@@ -436,7 +475,7 @@
                         <input type="date" id="orderDate" name="orderDate" required>
                     </div>
                     <div class="form-group">
-                        <label for="orderNumber">Order Number:</label>
+                        <label for="OR">Order Number:</label>
                         <input type="text" id="orderNumber" name="orderNumber">
                     </div>
                 </div>
@@ -666,17 +705,11 @@
             const doc = new jsPDF();
             
             // Get form data
-            const customerName = document.getElementById('customerName').value || 'Unknown_Customer';
-            const repName = document.getElementById('repName').value || 'Unknown_Rep';
-            const orderDate = document.getElementById('orderDate').value || new Date().toISOString().split('T')[0];
-            const orderNumber = document.getElementById('orderNumber').value || 'Draft';
+            const customerName = document.getElementById('customerName').value || 'N/A';
+            const repName = document.getElementById('repName').value || 'N/A';
+            const orderDate = document.getElementById('orderDate').value || 'N/A';
+            const orderNumber = document.getElementById('orderNumber').value || 'N/A';
             const priceType = currentPriceType === 'cash' ? 'For Cash' : 'For Credit';
-            
-            // Sanitize names for filename (remove special characters)
-            const sanitize = (str) => str.replace(/[^a-zA-Z0-9-_]/g, '_');
-            const sanitizedCustomerName = sanitize(customerName);
-            const sanitizedRepName = sanitize(repName);
-            const filename = `Jayananda_Order_${sanitizedCustomerName}_${sanitizedRepName}_${orderDate}.pdf`;
             
             // Header
             doc.setFontSize(20);
@@ -687,19 +720,19 @@
             // Order details
             doc.setFontSize(12);
             doc.text(`Customer: ${customerName}`, 20, 50);
-            doc.text(`Representative: ${repName}`, 20, 60);
-            doc.text(`Order Date: ${orderDate}`, 20, 70);
-            doc.text(`Order Number: ${orderNumber}`, 20, 80);
-            doc.text(`Price Type: ${priceType}`, 20, 90);
+            doc.text(`Representative: ${repName}`, 20, 57);
+            doc.text(`Order Date: ${orderDate}`, 20, 64);
+            doc.text(`Order Number: ${orderNumber}`, 20, 71);
+            doc.text(`Price Type: ${priceType}`, 20, 78);
             
             // Table headers
-            let yPos = 110;
-            doc.setFontSize(10);
+            let yPos = 90;
+            doc.setFontSize(9);
             doc.text('Item Code', 20, yPos);
-            doc.text('Description', 50, yPos);
-            doc.text('Qty', 120, yPos);
-            doc.text('Price', 140, yPos);
-            doc.text('Amount', 170, yPos);
+            doc.text('Description', 45, yPos);
+            doc.text('Qty', 130, yPos);
+            doc.text('Price', 150, yPos);
+            doc.text('Amount', 175, yPos);
             
             // Draw line under headers
             doc.line(20, yPos + 2, 190, yPos + 2);
@@ -709,6 +742,9 @@
             const quantityInputs = document.querySelectorAll('.quantity-input');
             let grandTotal = 0;
             
+            // Set smaller font size for item details
+            doc.setFontSize(8);
+            
             quantityInputs.forEach((input, index) => {
                 const qty = parseInt(input.value) || 0;
                 if (qty > 0) {
@@ -717,44 +753,65 @@
                     const amount = qty * price;
                     grandTotal += amount;
                     
-                    doc.text(item.Item.substring(0, 15), 20, yPos);
-                    doc.text(item['Item Description'].substring(0, 25), 50, yPos);
-                    doc.text(qty.toString(), 120, yPos);
-                    doc.text(`Rs.${price.toFixed(2)}`, 140, yPos);
-                    doc.text(`Rs.${amount.toFixed(2)}`, 170, yPos);
-                    yPos += 8;
+                    // Item code (limit to fit in column)
+                    doc.text(item.Item.substring(0, 12), 20, yPos);
                     
-                    if (yPos > 270) {
+                    // Description - split into multiple lines if too long
+                    const description = item['Item Description'];
+                    const maxWidth = 80; // Maximum width for description column
+                    const lines = doc.splitTextToSize(description, maxWidth);
+                    
+                    // Display first line of description
+                    doc.text(lines[0] || '', 45, yPos);
+                    
+                    // If description has multiple lines, add them below
+                    if (lines.length > 1) {
+                        for (let i = 1; i < Math.min(lines.length, 3); i++) { // Limit to 3 lines max
+                            yPos += 4; // Reduced from 6 to 4
+                            doc.text(lines[i], 45, yPos);
+                        }
+                        // If there are more than 3 lines, add "..." to indicate truncation
+                        if (lines.length > 3) {
+                            yPos += 4; // Reduced from 6 to 4
+                            doc.text('...', 45, yPos);
+                        }
+                    }
+                    
+                    // Reset yPos to the main line for other columns
+                    const mainLineY = yPos - (Math.min(lines.length - 1, 2) * 4) - (lines.length > 3 ? 4 : 0); // Updated calculation
+                    
+                    doc.text(qty.toString(), 130, mainLineY);
+                    doc.text(`Rs.${price.toFixed(2)}`, 150, mainLineY);
+                    doc.text(`Rs.${amount.toFixed(2)}`, 175, mainLineY);
+                    
+                    yPos += 8; // Reduced from 12 to 8
+                    
+                    // Check if we need a new page
+                    if (yPos > 270) { // Increased threshold to fit more content
                         doc.addPage();
                         yPos = 20;
+                        // Redraw headers on new page
+                        doc.setFontSize(9);
+                        doc.text('Item Code', 20, yPos);
+                        doc.text('Description', 45, yPos);
+                        doc.text('Qty', 130, yPos);
+                        doc.text('Price', 150, yPos);
+                        doc.text('Amount', 175, yPos);
+                        doc.line(20, yPos + 2, 190, yPos + 2);
+                        yPos += 10; // Reduced from 15 to 10
+                        doc.setFontSize(8);
                     }
                 }
             });
             
             // Grand total
             doc.line(20, yPos, 190, yPos);
-            yPos += 10;
+            yPos += 6; // Reduced from 10 to 6
             doc.setFontSize(12);
-            doc.text(`Grand Total: Rs.${grandTotal.toFixed(2)}`, 170, yPos, { align: 'right' });
+            doc.text(`Grand Total: Rs.${grandTotal.toFixed(2)}`, 175, yPos, { align: 'right' });
             
-            // Generate PDF blob for sharing
-            const pdfBlob = doc.output('blob');
-            
-            // Share or download
-            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
-                navigator.share({
-                    files: [new File([pdfBlob], filename, { type: 'application/pdf' })],
-                    title: 'Jayananda Associates Order',
-                    text: `Order for ${customerName} by ${repName} on ${orderDate}`
-                }).catch((error) => {
-                    console.error('Error sharing PDF:', error);
-                    // Fallback to download
-                    doc.save(filename);
-                });
-            } else {
-                // Fallback to download if sharing is not supported
-                doc.save(filename);
-            }
+            // Save PDF
+            doc.save(`Jayananda_Order_${orderNumber || 'Draft'}_${new Date().toISOString().split('T')[0]}.pdf`);
         }
 
         async function saveOrder() {
