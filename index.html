@@ -304,6 +304,25 @@
             transform: translateY(-2px);
         }
 
+        .search-container {
+            margin-bottom: 20px;
+        }
+
+        .search-container input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-container input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -404,6 +423,10 @@
             .scroll-buttons {
                 display: none;
             }
+
+            .search-container {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -455,6 +478,9 @@
 
             <div class="form-section">
                 <h2>Items</h2>
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Search by Item Name or List ID..." oninput="filterItems()">
+                </div>
                 <div id="loadingMessage" class="loading">Loading items...</div>
                 <div id="errorMessage" class="error" style="display: none;"></div>
                 
@@ -546,6 +572,7 @@
         // Global variables
         let itemsData = [];
         let currentPriceType = 'cash';
+        let filteredItems = [];
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -588,8 +615,8 @@
 
                 const data = await response.json();
                 itemsData = data;
+                filteredItems = [...itemsData]; // Initialize filteredItems with all items
                 
-                // Log the first item to inspect the JSON structure
                 if (itemsData.length > 0) {
                     console.log('First item in JSON data:', itemsData[0]);
                 }
@@ -607,13 +634,22 @@
             }
         }
 
+        function filterItems() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            filteredItems = itemsData.filter(item => {
+                const itemListId = (item['Item List ID'] || item['ItemListID'] || item['ListID'] || '').toString().toLowerCase();
+                const description = item['Item Description']?.toLowerCase() || '';
+                return itemListId.includes(searchInput) || description.includes(searchInput);
+            });
+            displayItems();
+        }
+
         function displayItems() {
             const tbody = document.getElementById('itemsTableBody');
             tbody.innerHTML = '';
 
-            itemsData.forEach((item, index) => {
+            filteredItems.forEach((item, index) => {
                 const row = document.createElement('tr');
-                // Adjust the field name based on your JSON structure (e.g., 'ItemListID', 'ListID', etc.)
                 const itemListId = item['Item List ID'] || item['ItemListID'] || item['ListID'] || 'N/A';
                 row.innerHTML = `
                     <td>${itemListId}</td>
@@ -627,14 +663,20 @@
                                class="quantity-input" 
                                min="0" 
                                max="${item['On Hand']}" 
-                               value="0" 
+                               value="${item.quantity || 0}" 
                                onchange="updateQuantity(${index}, this.value)"
                                onkeyup="updateQuantity(${index}, this.value)">
                     </td>
                     <td class="amount-cell" id="amount-${index}">Rs.0.00</td>
                 `;
+                if (item.quantity && item.quantity > 0) {
+                    row.classList.add('ordered');
+                }
                 tbody.appendChild(row);
             });
+
+            updatePricesDisplay();
+            calculateTotals();
         }
 
         function getCurrentPrice(item) {
@@ -644,15 +686,16 @@
         function updatePricesDisplay() {
             const priceCells = document.querySelectorAll('.price-cell');
             priceCells.forEach((cell, index) => {
-                if (itemsData[index]) {
-                    cell.textContent = `Rs.${getCurrentPrice(itemsData[index]).toFixed(2)}`;
+                if (filteredItems[index]) {
+                    cell.textContent = `Rs.${getCurrentPrice(filteredItems[index]).toFixed(2)}`;
                 }
             });
         }
 
         function updateQuantity(index, quantity) {
             const qty = parseInt(quantity) || 0;
-            const item = itemsData[index];
+            const item = filteredItems[index];
+            item.quantity = qty; // Store quantity in item object for persistence during filtering
             const price = getCurrentPrice(item);
             const amount = qty * price;
             
@@ -673,13 +716,12 @@
             let totalQuantity = 0;
             let grandTotal = 0;
 
-            const quantityInputs = document.querySelectorAll('.quantity-input');
-            quantityInputs.forEach((input, index) => {
-                const qty = parseInt(input.value) || 0;
+            filteredItems.forEach((item, index) => {
+                const qty = parseInt(document.querySelectorAll('.quantity-input')[index]?.value) || 0;
                 if (qty > 0) {
                     totalItems++;
                     totalQuantity += qty;
-                    const price = getCurrentPrice(itemsData[index]);
+                    const price = getCurrentPrice(item);
                     grandTotal += qty * price;
                 }
             });
@@ -731,12 +773,11 @@
             quantityInputs.forEach((input, index) => {
                 const qty = parseInt(input.value) || 0;
                 if (qty > 0) {
-                    const item = itemsData[index];
+                    const item = filteredItems[index];
                     const price = getCurrentPrice(item);
                     const amount = qty * price;
                     grandTotal += amount;
                     
-                    // Adjust the field name based on your JSON structure
                     const itemListId = (item['Item List ID'] || item['ItemListID'] || item['ListID'] || 'N/A').toString().substring(0, 8);
                     doc.text(itemListId, 20, yPos);
                     
@@ -810,16 +851,10 @@
                 document.getElementById('customerName').value = '';
                 document.getElementById('repName').value = '';
                 document.getElementById('orderNumber').value = '';
+                document.getElementById('searchInput').value = '';
                 
-                document.querySelectorAll('.quantity-input').forEach(input => {
-                    input.value = '0';
-                });
-                
-                document.querySelectorAll('tr.ordered').forEach(row => {
-                    row.classList.remove('ordered');
-                });
-                
-                calculateTotals();
+                filteredItems.forEach(item => item.quantity = 0);
+                filterItems();
             }
         }
 
