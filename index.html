@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -318,8 +279,8 @@
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
-            opacity: 1; /* Ensure buttons are always visible */
-            pointer-events: auto; /* Ensure buttons are always clickable */
+            opacity: 1;
+            pointer-events: auto;
         }
 
         .scroll-btn {
@@ -336,7 +297,7 @@
             cursor: pointer;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
-            pointer-events: auto; /* Ensure buttons are clickable */
+            pointer-events: auto;
         }
 
         .scroll-btn:hover {
@@ -475,7 +436,7 @@
                         <input type="date" id="orderDate" name="orderDate" required>
                     </div>
                     <div class="form-group">
-                        <label for="OR">Order Number:</label>
+                        <label for="orderNumber">Order Number:</label>
                         <input type="text" id="orderNumber" name="orderNumber">
                     </div>
                 </div>
@@ -503,6 +464,7 @@
                 <table class="items-table" id="itemsTable" style="display: none;">
                     <thead>
                         <tr>
+                            <th>Item List ID</th>
                             <th>Item Code</th>
                             <th>Description</th>
                             <th>Type</th>
@@ -547,7 +509,46 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script>
+    <script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+
+                    // Convert sheet to JSON to filter blank rows
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                    // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    // Fallback
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+
+                    // Convert filtered JSON back to CSV
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+
         // Configuration
         const CONFIG = {
             fileUUID: '9d23272e-bb43-4c30-8c23-01b1156e2355'
@@ -625,6 +626,7 @@
             itemsData.forEach((item, index) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
+                    <td>${item['Item List ID'] || index + 1}</td>
                     <td>${item.Item}</td>
                     <td>${item['Item Description']}</td>
                     <td>${item.TYPE}</td>
@@ -728,11 +730,12 @@
             // Table headers
             let yPos = 90;
             doc.setFontSize(9);
-            doc.text('Item Code', 20, yPos);
-            doc.text('Description', 45, yPos);
-            doc.text('Qty', 130, yPos);
-            doc.text('Price', 150, yPos);
-            doc.text('Amount', 175, yPos);
+            doc.text('List ID', 20, yPos);
+            doc.text('Item Code', 35, yPos);
+            doc.text('Description', 55, yPos);
+            doc.text('Qty', 120, yPos);
+            doc.text('Price', 140, yPos);
+            doc.text('Amount', 165, yPos);
             
             // Draw line under headers
             doc.line(20, yPos + 2, 190, yPos + 2);
@@ -753,52 +756,56 @@
                     const amount = qty * price;
                     grandTotal += amount;
                     
-                    // Item code (limit to fit in column)
-                    doc.text(item.Item.substring(0, 12), 20, yPos);
+                    // Item List ID
+                    const itemListId = (item['Item List ID'] || index + 1).toString().substring(0, 8);
+                    doc.text(itemListId, 20, yPos);
+                    
+                    // Item code
+                    doc.text(item.Item.substring(0, 12), 35, yPos);
                     
                     // Description - split into multiple lines if too long
                     const description = item['Item Description'];
-                    const maxWidth = 80; // Maximum width for description column
+                    const maxWidth = 60; // Adjusted for new column
                     const lines = doc.splitTextToSize(description, maxWidth);
                     
                     // Display first line of description
-                    doc.text(lines[0] || '', 45, yPos);
+                    doc.text(lines[0] || '', 55, yPos);
                     
                     // If description has multiple lines, add them below
                     if (lines.length > 1) {
-                        for (let i = 1; i < Math.min(lines.length, 3); i++) { // Limit to 3 lines max
-                            yPos += 4; // Reduced from 6 to 4
-                            doc.text(lines[i], 45, yPos);
+                        for (let i = 1; i < Math.min(lines.length, 3); i++) {
+                            yPos += 4;
+                            doc.text(lines[i], 55, yPos);
                         }
-                        // If there are more than 3 lines, add "..." to indicate truncation
                         if (lines.length > 3) {
-                            yPos += 4; // Reduced from 6 to 4
-                            doc.text('...', 45, yPos);
+                            yPos += 4;
+                            doc.text('...', 55, yPos);
                         }
                     }
                     
                     // Reset yPos to the main line for other columns
-                    const mainLineY = yPos - (Math.min(lines.length - 1, 2) * 4) - (lines.length > 3 ? 4 : 0); // Updated calculation
+                    const mainLineY = yPos - (Math.min(lines.length - 1, 2) * 4) - (lines.length > 3 ? 4 : 0);
                     
-                    doc.text(qty.toString(), 130, mainLineY);
-                    doc.text(`Rs.${price.toFixed(2)}`, 150, mainLineY);
-                    doc.text(`Rs.${amount.toFixed(2)}`, 175, mainLineY);
+                    doc.text(qty.toString(), 120, mainLineY);
+                    doc.text(`Rs.${price.toFixed(2)}`, 140, mainLineY);
+                    doc.text(`Rs.${amount.toFixed(2)}`, 165, mainLineY);
                     
-                    yPos += 8; // Reduced from 12 to 8
+                    yPos += 8;
                     
                     // Check if we need a new page
-                    if (yPos > 270) { // Increased threshold to fit more content
+                    if (yPos > 270) {
                         doc.addPage();
                         yPos = 20;
                         // Redraw headers on new page
                         doc.setFontSize(9);
-                        doc.text('Item Code', 20, yPos);
-                        doc.text('Description', 45, yPos);
-                        doc.text('Qty', 130, yPos);
-                        doc.text('Price', 150, yPos);
-                        doc.text('Amount', 175, yPos);
+                        doc.text('List ID', 20, yPos);
+                        doc.text('Item Code', 35, yPos);
+                        doc.text('Description', 55, yPos);
+                        doc.text('Qty', 120, yPos);
+                        doc.text('Price', 140, yPos);
+                        doc.text('Amount', 165, yPos);
                         doc.line(20, yPos + 2, 190, yPos + 2);
-                        yPos += 10; // Reduced from 15 to 10
+                        yPos += 10;
                         doc.setFontSize(8);
                     }
                 }
@@ -806,17 +813,15 @@
             
             // Grand total
             doc.line(20, yPos, 190, yPos);
-            yPos += 6; // Reduced from 10 to 6
+            yPos += 6;
             doc.setFontSize(12);
-            doc.text(`Grand Total: Rs.${grandTotal.toFixed(2)}`, 175, yPos, { align: 'right' });
+            doc.text(`Grand Total: Rs.${grandTotal.toFixed(2)}`, 165, yPos, { align: 'right' });
             
             // Save PDF
             doc.save(`Jayananda_Order_${orderNumber || 'Draft'}_${new Date().toISOString().split('T')[0]}.pdf`);
         }
 
         async function saveOrder() {
-            // This function would typically save the order to a database
-            // For now, we'll show a success message
             const successDiv = document.createElement('div');
             successDiv.className = 'success';
             successDiv.textContent = 'Order saved successfully!';
@@ -846,7 +851,7 @@
                     row.classList.remove('ordered');
                 });
                 
-                // Reset totals
+                // Update totals
                 calculateTotals();
             }
         }
