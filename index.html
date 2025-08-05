@@ -270,7 +270,6 @@
             transform: translateY(-2px);
         }
 
-        /* Scroll Buttons */
         .scroll-buttons {
             position: fixed;
             bottom: 20px;
@@ -305,7 +304,6 @@
             transform: translateY(-2px);
         }
 
-        /* Mobile Responsiveness */
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -382,7 +380,6 @@
             }
         }
 
-        /* Print Styles */
         @media print {
             body {
                 background: white;
@@ -522,23 +519,15 @@
                     var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
                     var firstSheetName = workbook.SheetNames[0];
                     var worksheet = workbook.Sheets[firstSheetName];
-
-                    // Convert sheet to JSON to filter blank rows
                     var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                    // Filter out blank rows (rows where all cells are empty, null, or undefined)
                     var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                    // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
                     var headerRowIndex = filteredData.findIndex((row, index) =>
                         row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
                     );
-                    // Fallback
                     if (headerRowIndex === -1 || headerRowIndex > 25) {
                         headerRowIndex = 0;
                     }
-
-                    // Convert filtered JSON back to CSV
-                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
                     csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
                     return csv;
                 } catch (e) {
@@ -564,18 +553,12 @@
         });
 
         async function initializeApp() {
-            // Set current date
             document.getElementById('orderDate').value = new Date().toISOString().split('T')[0];
-            
-            // Add event listeners
             setupEventListeners();
-            
-            // Load items from JSONSilo
             await loadItems();
         }
 
         function setupEventListeners() {
-            // Price type change
             document.querySelectorAll('input[name="priceType"]').forEach(radio => {
                 radio.addEventListener('change', function() {
                     currentPriceType = this.value;
@@ -606,6 +589,11 @@
                 const data = await response.json();
                 itemsData = data;
                 
+                // Log the first item to inspect the JSON structure
+                if (itemsData.length > 0) {
+                    console.log('First item in JSON data:', itemsData[0]);
+                }
+                
                 displayItems();
                 loadingMessage.style.display = 'none';
                 itemsTable.style.display = 'table';
@@ -625,8 +613,10 @@
 
             itemsData.forEach((item, index) => {
                 const row = document.createElement('tr');
+                // Adjust the field name based on your JSON structure (e.g., 'ItemListID', 'ListID', etc.)
+                const itemListId = item['Item List ID'] || item['ItemListID'] || item['ListID'] || 'N/A';
                 row.innerHTML = `
-                    <td>${item['Item List ID'] || index + 1}</td>
+                    <td>${itemListId}</td>
                     <td>${item.Item}</td>
                     <td>${item['Item Description']}</td>
                     <td>${item.TYPE}</td>
@@ -666,10 +656,8 @@
             const price = getCurrentPrice(item);
             const amount = qty * price;
             
-            // Update amount display
             document.getElementById(`amount-${index}`).textContent = `Rs.${amount.toFixed(2)}`;
             
-            // Update row styling
             const row = document.getElementById(`amount-${index}`).closest('tr');
             if (qty > 0) {
                 row.classList.add('ordered');
@@ -677,7 +665,6 @@
                 row.classList.remove('ordered');
             }
             
-            // Update totals
             calculateTotals();
         }
 
@@ -706,20 +693,17 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             
-            // Get form data
             const customerName = document.getElementById('customerName').value || 'N/A';
             const repName = document.getElementById('repName').value || 'N/A';
             const orderDate = document.getElementById('orderDate').value || 'N/A';
             const orderNumber = document.getElementById('orderNumber').value || 'N/A';
             const priceType = currentPriceType === 'cash' ? 'For Cash' : 'For Credit';
             
-            // Header
             doc.setFontSize(20);
             doc.text('Jayananda Associates', 105, 20, { align: 'center' });
             doc.setFontSize(16);
             doc.text('Order Summary', 105, 30, { align: 'center' });
             
-            // Order details
             doc.setFontSize(12);
             doc.text(`Customer: ${customerName}`, 20, 50);
             doc.text(`Representative: ${repName}`, 20, 57);
@@ -727,7 +711,6 @@
             doc.text(`Order Number: ${orderNumber}`, 20, 71);
             doc.text(`Price Type: ${priceType}`, 20, 78);
             
-            // Table headers
             let yPos = 90;
             doc.setFontSize(9);
             doc.text('List ID', 20, yPos);
@@ -737,15 +720,12 @@
             doc.text('Price', 140, yPos);
             doc.text('Amount', 165, yPos);
             
-            // Draw line under headers
             doc.line(20, yPos + 2, 190, yPos + 2);
             yPos += 10;
             
-            // Add ordered items
             const quantityInputs = document.querySelectorAll('.quantity-input');
             let grandTotal = 0;
             
-            // Set smaller font size for item details
             doc.setFontSize(8);
             
             quantityInputs.forEach((input, index) => {
@@ -756,22 +736,18 @@
                     const amount = qty * price;
                     grandTotal += amount;
                     
-                    // Item List ID
-                    const itemListId = (item['Item List ID'] || index + 1).toString().substring(0, 8);
+                    // Adjust the field name based on your JSON structure
+                    const itemListId = (item['Item List ID'] || item['ItemListID'] || item['ListID'] || 'N/A').toString().substring(0, 8);
                     doc.text(itemListId, 20, yPos);
                     
-                    // Item code
                     doc.text(item.Item.substring(0, 12), 35, yPos);
                     
-                    // Description - split into multiple lines if too long
                     const description = item['Item Description'];
-                    const maxWidth = 60; // Adjusted for new column
+                    const maxWidth = 60;
                     const lines = doc.splitTextToSize(description, maxWidth);
                     
-                    // Display first line of description
                     doc.text(lines[0] || '', 55, yPos);
                     
-                    // If description has multiple lines, add them below
                     if (lines.length > 1) {
                         for (let i = 1; i < Math.min(lines.length, 3); i++) {
                             yPos += 4;
@@ -783,7 +759,6 @@
                         }
                     }
                     
-                    // Reset yPos to the main line for other columns
                     const mainLineY = yPos - (Math.min(lines.length - 1, 2) * 4) - (lines.length > 3 ? 4 : 0);
                     
                     doc.text(qty.toString(), 120, mainLineY);
@@ -792,11 +767,9 @@
                     
                     yPos += 8;
                     
-                    // Check if we need a new page
                     if (yPos > 270) {
                         doc.addPage();
                         yPos = 20;
-                        // Redraw headers on new page
                         doc.setFontSize(9);
                         doc.text('List ID', 20, yPos);
                         doc.text('Item Code', 35, yPos);
@@ -811,13 +784,11 @@
                 }
             });
             
-            // Grand total
             doc.line(20, yPos, 190, yPos);
             yPos += 6;
             doc.setFontSize(12);
             doc.text(`Grand Total: Rs.${grandTotal.toFixed(2)}`, 165, yPos, { align: 'right' });
             
-            // Save PDF
             doc.save(`Jayananda_Order_${orderNumber || 'Draft'}_${new Date().toISOString().split('T')[0]}.pdf`);
         }
 
@@ -836,27 +807,22 @@
 
         function clearOrder() {
             if (confirm('Are you sure you want to clear the current order?')) {
-                // Clear form fields
                 document.getElementById('customerName').value = '';
                 document.getElementById('repName').value = '';
                 document.getElementById('orderNumber').value = '';
                 
-                // Reset quantities
                 document.querySelectorAll('.quantity-input').forEach(input => {
                     input.value = '0';
                 });
                 
-                // Remove ordered styling
                 document.querySelectorAll('tr.ordered').forEach(row => {
                     row.classList.remove('ordered');
                 });
                 
-                // Update totals
                 calculateTotals();
             }
         }
 
-        // Scroll functions
         function scrollToTop() {
             window.scrollTo({
                 top: 0,
